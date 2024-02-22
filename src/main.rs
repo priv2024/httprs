@@ -30,7 +30,7 @@ async fn process(
             .unwrap(),
     );
 
-    let (input_tx, input_rx) = kanal::bounded_async::<String>(config.threads);
+    let (input_tx, input_rx) = loole::bounded::<String>(config.threads);
 
     let mut tasks = vec![];
     for _ in 0..config.threads {
@@ -38,7 +38,7 @@ async fn process(
         let input_rx = input_rx.clone();
 
         tasks.push(tokio::spawn(async move {
-            while let Ok(host) = input_rx.recv().await {
+            while let Ok(host) = input_rx.recv_async().await {
                 let mut https_url = String::from(SCHEME_HTTPS);
                 https_url.push_str(host.as_str());
                 if let Ok(_res) = client.get(&https_url).send().await {
@@ -57,7 +57,7 @@ async fn process(
     }
 
     while let Some(host) = lines.next_line().await? {
-        input_tx.send(host).await.unwrap();
+        input_tx.send_async(host).await.unwrap();
     }
 
     input_tx.close();
