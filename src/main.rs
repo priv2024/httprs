@@ -1,4 +1,5 @@
-use clap::Parser;
+use clap::{Parser, value_parser};
+use regex::bytes::Regex;
 use reqwest::Client;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
 
@@ -24,21 +25,53 @@ struct Config {
         default_value_t = 60,
         help_heading = "Rate-Limit 🐌"
     )]
-    tasks: usize
+    tasks: usize,
+
+    /// Regular expression to match
+    #[arg(
+    short = 'r',
+    long = "match-regex",
+    help_heading = "Matchers 🔍",
+    value_parser = value_parser!(Regex)
+    )]
+    match_regexes: Vec<Regex>,
 }
 
-async fn process_host(client: &Client, host: &String) {
+async fn process_host(client: &Client, host: &String, regexes: &Vec<Regex>) {
     let mut https_url = String::from(SCHEME_HTTPS);
     https_url.push_str(host.as_str());
-    if let Ok(_res) = client.get(&https_url).send().await {
-        println!("{}{}", SCHEME_HTTPS, host);
+    if let Ok(res) = client.get(&https_url).send().await {
+        if !regexes.is_empty() {
+            if let Ok(bytes) = res.bytes().await {
+                for regex in regexes {
+                    if regex.is_match(bytes.as_ref()) {
+                        println!("{}{}", SCHEME_HTTPS, host);
+                        break;
+                    }
+                }
+            }
+        } else {
+            println!("{}{}", SCHEME_HTTPS, host);
+        }
+
         return;
     }
 
     let mut http_url = String::from(SCHEME_HTTP);
     http_url.push_str(host.as_str());
-    if let Ok(_res) = client.get(&http_url).send().await {
-        println!("{}{}", SCHEME_HTTP, host);
+    if let Ok(res) = client.get(&http_url).send().await {
+        if !regexes.is_empty() {
+            if let Ok(bytes) = res.bytes().await {
+                for regex in regexes {
+                    if regex.is_match(bytes.as_ref()) {
+                        println!("{}{}", SCHEME_HTTP, host);
+                        break;
+                    }
+                }
+            }
+        } else {
+            println!("{}{}", SCHEME_HTTP, host);
+        };
     }
 }
 
@@ -62,12 +95,13 @@ async fn process(
 
     let mut handles = vec![];
     for _ in 0..config.tasks {
+        let regexes = config.match_regexes.clone();
         let client = client.clone();
         let rx = rx.clone();
 
         handles.push(tokio::spawn(async move {
             while let Ok(host) = rx.recv().await {
-                process_host(&client, &host).await
+                process_host(&client, &host, &regexes).await
             }
 
             rx.close();

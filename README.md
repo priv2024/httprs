@@ -28,6 +28,9 @@ Optimizations ⚙️:
 
 Rate-Limit 🐌:
   -t, --tasks <TASKS>  Number of concurrent requests [default: 60]
+
+Matchers 🔍:
+  -r, --match-regex <MATCH_REGEXES>  Regular expression to match
 ```
 
 ```shell
