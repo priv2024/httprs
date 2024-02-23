@@ -14,6 +14,22 @@ Probe hosts using custom regular expressions.
 
 ## Usage
 
+```
+🧨 http toolkit that allows probing many hosts.
+
+Usage: httprs [OPTIONS]
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+
+Optimizations ⚙️:
+  -T, --timeout <TIMEOUT>  Timeout in milliseconds [default: 6000]
+
+Rate-Limit 🐌:
+  -t, --tasks <TASKS>  Number of concurrent requests [default: 60]
+```
+
 ```shell
 echo google.fr | ./httprs
 ```
