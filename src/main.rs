@@ -1,15 +1,30 @@
+use clap::Parser;
 use reqwest::Client;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
 
 const SCHEME_HTTPS: &str = "https://";
 const SCHEME_HTTP: &str = "http://";
 
+#[derive(Parser)]
+#[command(version, about = "🧨 http toolkit that allows probing many hosts.")]
 struct Config {
-    /** Timeout in milliseconds */
+    /// Timeout in milliseconds
+    #[arg(
+        short = 'T',
+        long = "timeout",
+        default_value_t = 6000,
+        help_heading = "Optimizations ⚙️"
+    )]
     timeout: u64,
 
-    /** Number of concurrent requests */
-    threads: usize,
+    /// Number of concurrent requests
+    #[arg(
+        short = 't',
+        long = "tasks",
+        default_value_t = 60,
+        help_heading = "Rate-Limit 🐌"
+    )]
+    tasks: usize
 }
 
 async fn process_host(client: &Client, host: &String) {
@@ -43,10 +58,10 @@ async fn process(
         .build()
         .unwrap();
 
-    let (tx, rx) = async_channel::bounded(config.threads);
+    let (tx, rx) = async_channel::bounded(config.tasks);
 
     let mut handles = vec![];
-    for _ in 0..config.threads {
+    for _ in 0..config.tasks {
         let client = client.clone();
         let rx = rx.clone();
 
@@ -74,10 +89,7 @@ async fn process(
 
 #[tokio::main]
 async fn main() {
-    let config = Config {
-        timeout: 5000,
-        threads: 100,
-    };
+    let config = Config::parse();
 
     let stdin = tokio::io::stdin();
     let reader = BufReader::new(stdin);
