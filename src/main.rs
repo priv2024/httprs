@@ -1,6 +1,7 @@
-use clap::{Parser, value_parser};
+use clap::{value_parser, Parser};
 use regex::bytes::Regex;
 use reqwest::Client;
+use std::ops::Add;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
 
 #[derive(Parser)]
@@ -26,45 +27,63 @@ struct Config {
 
     /// Regular expression to match
     #[arg(
-    short = 'r',
-    long = "match-regex",
-    help_heading = "Matchers 🔍",
-    value_parser = value_parser!(Regex)
+        short = 'r',
+        long = "match-regex",
+        help_heading = "Matchers 🔍",
+        value_parser = value_parser!(Regex)
     )]
     match_regexes: Vec<Regex>,
 }
 
-async fn process_host(client: &Client, host: &String, regexes: &Vec<Regex>) {
-    let schemes = ["https://", "http://"];
-
-    for scheme in schemes {
-        let mut url = String::from(scheme);
-        url.push_str(host.as_str());
-
-        // Skip non-standard protocols
-        if url.ends_with(":80") && scheme == "https" {
-            continue;
-        } else if url.ends_with(":443") && scheme == "http" {
-            continue;
-        }
-
-        if let Ok(res) = client.get(url).send().await {
-            if !regexes.is_empty() {
-                if let Ok(bytes) = res.bytes().await {
+async fn process_url(client: &Client, url: &String, regexes: &Vec<Regex>) -> bool {
+    match client.get(url).send().await {
+        Err(_) => false,
+        Ok(res) => match regexes.is_empty() {
+            true => true,
+            false => match res.bytes().await {
+                Err(_) => false,
+                Ok(bytes) => {
                     let bytes = bytes.as_ref();
-
                     for regex in regexes {
                         if regex.is_match(bytes) {
-                            println!("{}{}", scheme, host);
-                            break;
+                            return true;
                         }
                     }
+                    return false;
                 }
-            } else {
-                println!("{}{}", scheme, host);
-            }
+            },
+        },
+    }
+}
 
-            return;
+async fn process_host(client: &Client, host: &String, regexes: &Vec<Regex>) {
+    let mut schemes = vec![];
+
+    if host.starts_with("https://") || host.starts_with("http://") {
+        schemes.push(None);
+    } else {
+        for scheme in ["https://", "http://"] {
+            if host.ends_with(":80") && scheme == "https" {
+                continue;
+            } else if host.ends_with(":443") && scheme == "http" {
+                continue;
+            }
+            schemes.push(Some(scheme));
+        }
+    }
+
+    for scheme in schemes {
+        let url = match scheme {
+            None => String::from(host),
+            Some(scheme) => String::from(scheme).add(host),
+        };
+
+        match process_url(client, &url, regexes).await {
+            true => {
+                println!("{}", url);
+                break;
+            }
+            false => continue,
         }
     }
 }
