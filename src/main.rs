@@ -3,9 +3,6 @@ use regex::bytes::Regex;
 use reqwest::Client;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
 
-const SCHEME_HTTPS: &str = "https://";
-const SCHEME_HTTP: &str = "http://";
-
 #[derive(Parser)]
 #[command(version, about = "🧨 http toolkit that allows probing many hosts.")]
 struct Config {
@@ -38,40 +35,37 @@ struct Config {
 }
 
 async fn process_host(client: &Client, host: &String, regexes: &Vec<Regex>) {
-    let mut https_url = String::from(SCHEME_HTTPS);
-    https_url.push_str(host.as_str());
-    if let Ok(res) = client.get(&https_url).send().await {
-        if !regexes.is_empty() {
-            if let Ok(bytes) = res.bytes().await {
-                for regex in regexes {
-                    if regex.is_match(bytes.as_ref()) {
-                        println!("{}{}", SCHEME_HTTPS, host);
-                        break;
-                    }
-                }
-            }
-        } else {
-            println!("{}{}", SCHEME_HTTPS, host);
+    let schemes = ["https://", "http://"];
+
+    for scheme in schemes {
+        let mut url = String::from(scheme);
+        url.push_str(host.as_str());
+
+        // Skip non-standard protocols
+        if url.ends_with(":80") && scheme == "https" {
+            continue;
+        } else if url.ends_with(":443") && scheme == "http" {
+            continue;
         }
 
-        return;
-    }
+        if let Ok(res) = client.get(url).send().await {
+            if !regexes.is_empty() {
+                if let Ok(bytes) = res.bytes().await {
+                    let bytes = bytes.as_ref();
 
-    let mut http_url = String::from(SCHEME_HTTP);
-    http_url.push_str(host.as_str());
-    if let Ok(res) = client.get(&http_url).send().await {
-        if !regexes.is_empty() {
-            if let Ok(bytes) = res.bytes().await {
-                for regex in regexes {
-                    if regex.is_match(bytes.as_ref()) {
-                        println!("{}{}", SCHEME_HTTP, host);
-                        break;
+                    for regex in regexes {
+                        if regex.is_match(bytes) {
+                            println!("{}{}", scheme, host);
+                            break;
+                        }
                     }
                 }
+            } else {
+                println!("{}{}", scheme, host);
             }
-        } else {
-            println!("{}{}", SCHEME_HTTP, host);
-        };
+
+            return;
+        }
     }
 }
 
