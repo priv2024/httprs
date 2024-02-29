@@ -24,13 +24,13 @@ Options:
   -V, --version  Print version
 
 Optimizations ⚙️:
-  -T, --timeout <TIMEOUT>  Timeout in milliseconds [default: 6000]
+  -T, --timeout <TIMEOUT>  request duration threshold in milliseconds [default: 6000]
 
 Rate-Limit 🐌:
-  -t, --tasks <TASKS>  Number of concurrent requests [default: 60]
+  -t, --tasks <TASKS>  number of concurrent requests [default: 60]
 
 Matchers 🔍:
-  -r, --match-regex <MATCH_REGEXES>  Regular expression to match
+  -r, --match-regex <MATCH_REGEXES_PATH>  path to a list of regex patterns
 ```
 
 ```shell
