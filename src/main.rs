@@ -101,6 +101,7 @@ async fn process(
             .enumerate()
             .filter(|(_, handle)| handle.is_finished())
             .map(|(index, _)| index)
+            .rev()
             .collect();
 
         for index in handle_finished_indices {
