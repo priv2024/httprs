@@ -1,7 +1,11 @@
+use std::sync::Arc;
+
 use clap::{value_parser, Parser};
 use regex::bytes::Regex;
 use reqwest::Client;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines, Stdin};
+use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
+use tokio::sync::Semaphore;
+use tokio::task::JoinHandle;
 
 #[derive(Parser)]
 #[command(version, about = "🧨 http toolkit that allows probing many hosts.")]
@@ -67,7 +71,7 @@ async fn process_url(client: &Client, url: &String, regexes: &Vec<Regex>) -> boo
 }
 
 async fn process(
-    mut lines: Lines<BufReader<Stdin>>,
+    mut host_lines: Lines<BufReader<Stdin>>,
     config: &Config,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = Client::builder()
@@ -82,61 +86,45 @@ async fn process(
         .build()
         .unwrap();
 
-    let (tx, rx) = async_channel::bounded::<String>(config.tasks);
-    let (output_tx, output_rx) = async_channel::bounded::<String>(1);
+    let semaphore = Arc::new(Semaphore::new(config.tasks));
+    let mut handles: Vec<JoinHandle<()>> = vec![];
 
-    // receive and write to stdout matched urls
-    let output_handle = tokio::spawn(async move {
-        let mut stdout = tokio::io::stdout();
-        while let Ok(url) = output_rx.recv().await {
-            stdout
-                .write_all(url.as_bytes())
-                .await
-                .expect("failed to write to stdout");
-            stdout
-                .write_u8(b'\n')
-                .await
-                .expect("failed to write new line to stdout");
+    while let Some(host) = host_lines.next_line().await.unwrap() {
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("failed to acquire permit");
+
+        let handle_finished_indices: Vec<usize> = handles
+            .iter()
+            .enumerate()
+            .filter(|(_, handle)| handle.is_finished())
+            .map(|(index, _)| index)
+            .collect();
+
+        for index in handle_finished_indices {
+            handles.swap_remove(index);
         }
-        output_rx.close();
-    });
 
-    // received input hosts and search for matches
-    let mut handles = vec![];
-    for _ in 0..config.tasks {
-        let regexes = config.match_regexes.clone();
         let client = client.clone();
-        let input_rx = rx.clone();
-        let output_tx = output_tx.clone();
+        let regexes = config.match_regexes.clone();
 
         handles.push(tokio::spawn(async move {
-            while let Ok(host) = input_rx.recv().await {
-                for url in get_url_variants(host) {
-                    if process_url(&client, &url, &regexes).await {
-                        // input matched
-                        // stop processing further variants
-                        output_tx.send(url).await.unwrap();
-                        break;
-                    }
+            for url in get_url_variants(host) {
+                if process_url(&client, &url, &regexes).await {
+                    println!("{}", url);
+                    break;
                 }
             }
 
-            input_rx.close();
+            drop(permit);
         }));
     }
 
-    while let Some(line) = lines.next_line().await.unwrap() {
-        tx.send(line).await.unwrap()
+    for handle in handles {
+        handle.await.expect("fatal error in a task")
     }
-
-    tx.close();
-
-    for task in handles {
-        task.await.unwrap();
-    }
-
-    output_tx.close();
-    output_handle.await.unwrap();
 
     Ok(())
 }
