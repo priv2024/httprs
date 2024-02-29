@@ -8,10 +8,6 @@ Probe hosts using custom regular expressions.
 
 ![preview](docs/preview.gif)
 
-## Requirements
-
-* OpenSSL with headers
-
 ## Usage
 
 ```
