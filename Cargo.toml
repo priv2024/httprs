@@ -7,6 +7,6 @@ edition = "2021"
 reqwest = { version = "0.11", features = [] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-std", "fs"] }
 clap = { version = "4", features = ["color", "help", "usage", "error-context", "suggestions", "derive", "wrap_help"] }
-regex = "1.10.3"
+regex = { version = "1.10", features = [] }
 openssl = { version = "0.10", features = ["vendored"] }
-colored = "2.1"
+colored = { version = "2.1", features = [] }
